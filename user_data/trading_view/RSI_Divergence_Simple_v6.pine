@@ -1,0 +1,86 @@
+//@version=6
+// ============================================================
+// DIVERGENCIA ALCISTA RSI - logica de "override del pivot"
+// (sin ta.pivotlow; mas simple y captura mas casos)
+//
+// 1) Si RSI < rsiZone (40) -> entra en modo de busqueda.
+// 2) El pivot es la vela con MENOR RSI. Si la vela siguiente tiene
+//    RSI menor, hace OVERRIDE y el pivot pasa a ser esa (y asi hasta
+//    que el RSI deja de bajar).
+// 3) Cuando el RSI empieza a subir, si llega una vela con RSI MAS ALTO
+//    pero cierre MAS BAJO que el del pivot  -> DIVERGENCIA ALCISTA.
+// 4) Entra LONG. Cierra cuando RSI >= exitRsi (50).
+// ============================================================
+strategy("RSI Divergence Simple", shorttitle="RSI DivS", overlay=false,
+     initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100,
+     commission_value=0.001, pyramiding=0)
+
+// ---------- Parametros ----------
+rsiLen   = input.int(14,   "RSI Length")
+rsiZone  = input.float(40, "Marca pivot si RSI <")
+riseNeed = input.float(0,  "RSI debe subir al menos (sobre el pivot)")
+exitRsi  = input.float(50, "Exit cuando RSI >= (close)")
+
+rsi = ta.rsi(close, rsiLen)
+
+// ---------- Estado (persiste entre velas) ----------
+var int   phase      = 0      // 0 = idle | 1 = buscando pivot | 2 = vigilando divergencia
+var float pivotRsi   = na     // RSI del pivot actual (el menor)
+var float pivotClose = na     // cierre en la vela del pivot
+var bool  pivotNew   = false  // true si en ESTA vela se marco/actualizo el pivot
+
+bullDiv = false               // true en la vela que confirma la divergencia
+
+// ---------- Logica vela a vela ----------
+pivotNew := false
+
+if phase == 0
+    if rsi < rsiZone
+        // Primera vela dentro de la zona -> se marca como pivot
+        phase      := 1
+        pivotRsi   := rsi
+        pivotClose := close
+        pivotNew   := true
+else if phase == 1
+    if rsi < pivotRsi
+        // OVERRIDE: la vela actual tiene RSI menor -> se vuelve el pivot
+        pivotRsi   := rsi
+        pivotClose := close
+        pivotNew   := true
+    else
+        // El RSI dejo de bajar -> bloqueamos el pivot y pasamos a vigilar
+        phase := 2
+else // phase == 2 (vigilando)
+    if rsi < pivotRsi
+        // Volvio a bajar -> actualizamos el pivot de nuevo
+        phase      := 1
+        pivotRsi   := rsi
+        pivotClose := close
+        pivotNew   := true
+    else if rsi >= pivotRsi + riseNeed and close < pivotClose
+        // DIVERGENCIA ALCISTA: RSI mas alto pero cierre mas bajo
+        phase   := 0
+        bullDiv := true
+        if strategy.position_size == 0
+            strategy.entry("Long", strategy.long)
+    else if rsi >= rsiZone
+        // El RSI se recupero sin low mas bajo del precio -> descartar episodio
+        phase := 0
+
+// ---------- Cierre de la posicion ----------
+if strategy.position_size != 0 and rsi >= exitRsi
+    strategy.close("Long", comment="RSI>=50")
+
+// ---------- Visual ----------
+plot(rsi, "RSI", color=color.new(#7E57C2, 0), linewidth=2)
+hline(rsiZone, "Zona pivot (<40)", color=color.new(#787B86, 0), linestyle=hline.style_dotted)
+hline(exitRsi,  "Exit RSI (50)",   color=color.new(#787B86, 50), linestyle=hline.style_dotted)
+hline(30, "Oversold", color=color.new(#787B86, 0), linestyle=hline.style_dotted)
+
+// Circulo en cada vela que marca/cambia el pivot (sin offset: es la vela actual)
+plotshape(pivotNew ? rsi : na, style=shape.circle, location=location.absolute,
+     color=color.green, size=size.small)
+
+// Label en la vela que confirma la divergencia (sin offset: es la vela actual)
+plotshape(bullDiv ? rsi : na, style=shape.labelup, location=location.absolute,
+     color=color.new(color.green, 0), textcolor=color.white, text="BULL")

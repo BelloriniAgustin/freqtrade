@@ -1,0 +1,53 @@
+//@version=6
+// ============================================================
+// ESTRATEGIA SIMPLE: divergencia alcista RSI (detector SZ)
+// - Cuando SZ detecta divergencia alcista -> abre LONG
+// - Cierra cuando RSI >= 50
+// ============================================================
+strategy("RSI Divergence SZ Simple", shorttitle="RSI Div SZ", overlay=false,
+     initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100,
+     commission_value=0.001, pyramiding=0)
+
+// ---------- Parametros ----------
+rsiLen  = input.int(14,   "RSI Length")
+lbL     = input.int(5,    "Pivot Lookback Left")
+lbR     = input.int(5,    "Pivot Lookback Right")
+rangeLo = input.int(5,    "Min bars since prev pivot")
+rangeHi = input.int(60,   "Max bars since prev pivot")
+exitRsi = input.float(50, "Exit cuando RSI >= (close)")
+
+// ---------- RSI (Wilder, igual que TA-Lib de freqtrade) ----------
+rsi = ta.rsi(close, rsiLen)
+
+// ---------- Detector de divergencia alcista (SZ Community) ----------
+// Pivot bajo en el RSI
+plFound = not na(ta.pivotlow(rsi, lbL, lbR))
+
+// El pivot previo debe estar entre rangeLo y rangeHi velas atras
+_inRange(cond) =>
+    bars = ta.barssince(cond == true)
+    rangeLo <= bars and bars <= rangeHi
+
+// Divergencia alcista regular:
+// - RSI: higher low  (RSI del pivot actual > RSI del pivot previo)
+// - Precio: lower low (close del pivot actual < close del pivot previo)
+rsiHL   = rsi[lbR] > ta.valuewhen(plFound, rsi[lbR], 1) and _inRange(plFound[1])
+priceLL = close[lbR] < ta.valuewhen(plFound, close[lbR], 1)
+bullDiv = plFound and priceLL and rsiHL
+
+// ---------- Open / Close ----------
+if bullDiv and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+
+if strategy.position_size != 0 and rsi >= exitRsi
+    strategy.close("Long", comment="RSI>=50")
+
+// ---------- Visual ----------
+plot(rsi, "RSI", color=color.new(#7E57C2, 0), linewidth=2)
+hline(70, "Overbought", color=color.new(#787B86, 0), linestyle=hline.style_dotted)
+hline(50, "Exit RSI",   color=color.new(#787B86, 50), linestyle=hline.style_dotted)
+hline(30, "Oversold",   color=color.new(#787B86, 0), linestyle=hline.style_dotted)
+
+plotshape(bullDiv ? rsi[lbR] : na, offset=-lbR, title="Bullish",
+     style=shape.labelup, location=location.absolute,
+     color=color.new(color.green, 0), textcolor=color.white, text="BULL")

@@ -1,0 +1,16 @@
+{
+  "strategy_name": "RSIDivergenceStrategy",
+  "params": {
+    "buy": {
+      "use_sma_filter": false,
+      "rsi_level": 35
+    },
+    "sell": {
+      "atr_multiplier": 5.0
+    },
+    "roi": {
+      "0": 0.12
+    }
+  },
+  "ft_stratparam_v": 1
+}

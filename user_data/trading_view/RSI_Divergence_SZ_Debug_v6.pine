@@ -1,0 +1,50 @@
+//@version=6
+// DEBUG: divergencia alcista RSI (detector SZ)
+// Pinta CADA condicion por separado para ver cual falla en una vela dada.
+indicator("RSI Divergence SZ DEBUG", shorttitle="RSI Div SZ DBG", overlay=false)
+
+rsiLen  = input.int(14,  "RSI Length")
+lbL     = input.int(5,   "Pivot Lookback Left")
+lbR     = input.int(5,   "Pivot Lookback Right")
+rangeLo = input.int(5,   "Min bars since prev pivot")
+rangeHi = input.int(60,  "Max bars since prev pivot")
+
+rsi = ta.rsi(close, rsiLen)
+
+// Pivot bajo confirmado en el RSI
+plFound = not na(ta.pivotlow(rsi, lbL, lbR))
+
+_inRange(cond) =>
+    bars = ta.barssince(cond == true)
+    rangeLo <= bars and bars <= rangeHi
+
+// Valores en la vela pivot (se leen lbR velas atras respecto a la confirmacion)
+curRsi  = rsi[lbR]
+curCl   = close[lbR]
+prevRsi = ta.valuewhen(plFound, rsi[lbR], 1)
+prevCl  = ta.valuewhen(plFound, close[lbR], 1)
+
+rsiHL   = curRsi > prevRsi
+priceLL = curCl  < prevCl
+rngOK   = _inRange(plFound[1])
+
+// ----- Visualizacion -----
+plot(rsi, "RSI", color=color.new(#7E57C2, 0), linewidth=2)
+
+// Marca la vela pivot y el valor de comparacion
+plot(plFound ? curRsi : na, "RSI en pivot", style=plot.style_circles,
+     color=color.green, linewidth=2, offset=-lbR)
+plot(prevRsi, "RSI pivot anterior", color=color.new(color.blue, 0), offset=-lbR)
+
+// Cada condicion como 0/1 (solo en las velas pivot; offset para dibujarlas en el pivot)
+plot(plFound ? (priceLL ? 1 : 0) : na, "priceLL (precio low mas bajo)", offset=-lbR,
+     style=plot.style_columns, color=priceLL ? color.green : color.red, histbase=0)
+plot(plFound ? (rsiHL ? 1 : 0) : na,   "rsiHL  (RSI high más alto)",     offset=-lbR,
+     style=plot.style_columns, color=rsiHL ? color.green : color.red, histbase=0)
+plot(plFound ? (rngOK ? 1 : 0) : na,   "rngOK  (distancia 5..60)",       offset=-lbR,
+     style=plot.style_columns, color=rngOK ? color.green : color.red, histbase=0)
+
+// Label BULL solo cuando TODO es true
+bullDiv = plFound and priceLL and rsiHL and rngOK
+plotshape(bullDiv ? curRsi : na, offset=-lbR, style=shape.labelup,
+     location=location.absolute, color=color.green, textcolor=color.white, text="BULL")
