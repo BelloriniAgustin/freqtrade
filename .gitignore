@@ -6,6 +6,7 @@ config*.json
 logfile.txt
 user_data/*
 !user_data/strategies/
+!user_data/trading_view/
 !user_data/notebooks
 !user_data/models
 !user_data/freqaimodels
